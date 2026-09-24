@@ -69,7 +69,7 @@ Below is how I aimed to meet the submission criteria:
 
 ## Limitations and issues
 
-The main issue I noticed was problematic data in August 2024, where subscription durations do not appear to be bucketed correctly. Although it might be possible to remedy, out of caution I decided to treat the data as suspect and exclude it from usage upstream, though I did not remove it from the staging layer.
+The main issue I noticed was problematic data in August 2024, where subscription durations do not appear to be bucketed correctly. Although it might be possible to remedy, out of caution I decided to treat the data as suspect and exclude it from usage downstream, though I did not remove it from the staging layer.
 
 I did not include any usage of snapshots or SCD logic as this is static data. In a real scenario, this data would be updated frequently; that would require an enhanced approach.
 
@@ -171,20 +171,6 @@ For the documentation site with the lineage graph and every column description:
 `uv run dbt docs generate`
 
 `uv run dbt docs serve`
-
----
-
-## Tests
-
-
-
-| Test | What it proves |
-|---|---|
-| `assert_periods_preserve_customer_date_range` | The merge never shortens, extends or loses a customer's timeline. |
-| Periods separated by more than the grace period | The merge left no overlapping or wrongly split periods. |
-| `assert_monthly_movement_balances` | Every month: active = last month's active − last month's contract ends + new + returning. Nothing appears or disappears. |
-| `assert_retention_summary_reconciles` | The dashboard table matches `fct_customer_month` exactly, every month, every measure. |
-| `accepted_values`, `relationships`, uniqueness | Categories are known, every foreign key resolves, and every grain is unique. |
 
 ---
 
