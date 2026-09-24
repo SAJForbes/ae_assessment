@@ -1,0 +1,16 @@
+sources:
+  - name: raw
+    description: Raw extracts supplied with the assessment, read straight from data/*.csv.gz.
+    meta:
+      # dbt-duckdb reads the gzipped CSV in place; no load step needed.
+      external_location: "read_csv('data/{name}.csv.gz', header = true)"
+    tables:
+      - name: activity
+        description: >
+          One row per active interval of a subscription. Mostly supply cycles, but
+          the final weeks of the extract (August 2024) are split into 0-8 day
+          fragments that overlap or sit inside other rows.
+      - name: customers
+        description: One row per customer, with their country.
+      - name: acq_orders
+        description: One row per customer, with the treatment category of their acquiring order.

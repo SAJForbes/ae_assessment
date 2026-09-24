@@ -1,0 +1,62 @@
+models:
+  - name: stg_activity
+    description: Active intervals per subscription
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [subscription_id, active_from_date, active_to_date]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "active_to_date >= active_from_date"
+    columns:
+      - name: customer_id
+        description: The customer holding the subscription.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: subscription_id
+        description: The subscription (treatment plan). A customer can hold several at once.
+        data_tests: [not_null]
+      - name: active_from_date
+        description: First day of the interval (inclusive).
+        data_tests: [not_null]
+      - name: active_to_date
+        description: Last day of the interval (inclusive). Equal to active_from_date for single-day rows.
+        data_tests: [not_null]
+
+  - name: stg_customers
+    description: One row per customer.
+    columns:
+      - name: customer_id
+        description: Primary key.
+        data_tests: [unique, not_null]
+      - name: country
+        description: Customer's country.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["United Kingdom", "Brazil"]
+
+  - name: stg_acq_orders
+    description: One row per customer with the treatment category that acquired them.
+    columns:
+      - name: customer_id
+        description: Primary key; one acquisition record per customer.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: acquisition_taxonomy
+        description: Treatment category of the acquiring order. Mental Health Group (1 customer) is folded into Other Group.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Hair Loss Group", "ED Group", "Weight Loss Group", "Other Group", "Sleep Group", "TRT Group"]

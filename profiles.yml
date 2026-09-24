@@ -1,0 +1,9 @@
+# Committed on purpose: a local DuckDB file needs no credentials.
+# `uv run dbt build` creates warehouse.duckdb in the project root.
+ae_assessment:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: warehouse.duckdb
+      threads: 4

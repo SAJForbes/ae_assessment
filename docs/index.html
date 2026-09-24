@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Retention</title>
+<meta name="description" content="Monthly customer activity, churn and cohort retention by country and acquisition treatment.">
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11, 11, 11, 0.10);
+    --good:           #006300;
+    --bad:            #d03b3b;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --series-5: #e87ba4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255, 255, 255, 0.10);
+      --good:           #0ca30c;
+      --bad:            #e66767;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255, 255, 255, 0.10);
+    --good:           #0ca30c;
+    --bad:            #e66767;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 24px; font-weight: 600; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--text-secondary); }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: end;
+    margin: 24px 0 16px;
+  }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .filters select {
+    font: inherit; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 28px 6px 10px; min-width: 180px;
+  }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .tile, .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .tile { padding: 16px; }
+  .tile .label { color: var(--text-secondary); font-size: 13px; }
+  .tile .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
+  .tile .delta { font-size: 13px; color: var(--text-secondary); }
+  .tile .delta .good { color: var(--good); font-weight: 600; }
+  .tile .delta .bad  { color: var(--bad);  font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid .wide { grid-column: 1 / -1; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { padding: 16px 16px 12px; min-width: 0; }
+  .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .card .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 8px; }
+  .card .note { color: var(--text-muted); font-size: 12px; margin: 6px 0 0; }
+  .table-toggle {
+    font: inherit; font-size: 12px; color: var(--text-secondary); background: none;
+    border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap;
+  }
+  .table-toggle:hover { color: var(--text-primary); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .legend i.line { width: 14px; height: 2px; border-radius: 1px; }
+
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart svg:focus { outline: 2px solid var(--series-1); outline-offset: 2px; border-radius: 4px; }
+  .axis-text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .label-text { fill: var(--text-secondary); font-size: 12px; }
+
+  .data-table { margin-top: 10px; overflow-x: auto; max-height: 360px; overflow-y: auto; }
+  .data-table table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .data-table th, .data-table td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .data-table th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; }
+  .data-table th:first-child, .data-table td:first-child { text-align: left; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: 12px; min-width: 140px;
+  }
+  #tooltip .title { color: var(--text-secondary); margin-bottom: 4px; }
+  #tooltip .row { display: flex; align-items: center; gap: 8px; }
+  #tooltip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tooltip .row span { color: var(--text-secondary); }
+  #tooltip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+
+  footer { margin-top: 28px; color: var(--text-secondary); font-size: 13px; }
+  footer h2 { font-size: 15px; color: var(--text-primary); margin: 0 0 8px; }
+  footer dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  footer dt { font-weight: 600; color: var(--text-primary); }
+  footer dd { margin: 0; }
+  @media (max-width: 600px) { footer dl { grid-template-columns: 1fr; } footer dd { margin-bottom: 6px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Customer retention</h1>
+    <p id="data-note"></p>
+  </header>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label>Country
+      <select id="filter-country"></select>
+    </label>
+    <label>Acquisition treatment
+      <select id="filter-taxonomy"></select>
+    </label>
+  </div>
+
+  <section class="kpis" id="kpis" aria-label="Headline figures"></section>
+
+  <div class="grid">
+    <section class="card wide" id="card-active">
+      <div class="card-head"><div><h2>Active customers</h2><p class="sub">Customers with an active subscription on at least one day of the month</p></div></div>
+    </section>
+
+    <section class="card wide" id="card-flows">
+      <div class="card-head"><div><h2>Customers gained and lost each month</h2><p class="sub">New and returning customers above the line; contracts ended below</p></div></div>
+    </section>
+
+    <section class="card" id="card-churn">
+      <div class="card-head"><div><h2>Monthly churn rate</h2><p class="sub">Share of the month's active customers whose contract ended that month</p></div></div>
+    </section>
+
+    <section class="card" id="card-curves">
+      <div class="card-head"><div><h2>Retention by acquisition treatment</h2><p class="sub">Share of each cohort still active, by months since first subscribing</p></div></div>
+    </section>
+  </div>
+
+  <footer>
+    <h2>Definitions</h2>
+    <dl>
+      <dt>Active</dt><dd>Covered by at least one subscription on any day of the month. The number of subscriptions doesn't matter.</dd>
+      <dt>Contract end (churn)</dt><dd>Cover stops and doesn't restart within 28 days. Recorded in the month cover stopped.</dd>
+      <dt>New</dt><dd>The month a customer's first subscription starts.</dd>
+      <dt>Returning</dt><dd>The month a customer starts again after an earlier contract ended.</dd>
+      <dt>Cohort</dt><dd>The month a customer first subscribed. Treatment is the category of their first order.</dd>
+      <dt>Data window</dt><dd>January 2019 to 31 July 2024. August 2024 is excluded as a partial, fragmented extract. Churn for the latest month isn't final, because a contract end is only confirmed 28 days after cover stops.</dd>
+    </dl>
+  </footer>
+</main>
+<div id="tooltip" role="status" aria-live="polite"></div>
+
+<script src="data.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  // ---------- data ----------
+  const DATA = window.RETENTION_DATA;
+  const C = Object.fromEntries(DATA.columns.map((name, i) => [name, i]));
+  const ROWS = DATA.rows;
+  const META = DATA.meta;
+
+  const MONTHS = [...new Set(ROWS.map(r => r[C.activity_month]))].sort();
+  const MONTH_INDEX = new Map(MONTHS.map((m, i) => [m, i]));
+  const LATEST = META.latest_month;
+  const LATEST_CHURN = META.latest_complete_churn_month;
+
+  // Treatments get a fixed colour slot, so a colour always means the same treatment.
+  const CURVE_TREATMENTS = ["Hair Loss Group", "ED Group", "Weight Loss Group", "Other Group", "Sleep Group"];
+  const TREATMENT_SLOT = Object.fromEntries(CURVE_TREATMENTS.map((t, i) => [t, i + 1]));
+  const ALL_TREATMENTS = ["Hair Loss Group", "ED Group", "Weight Loss Group", "Other Group", "Sleep Group", "TRT Group", "Unknown"];
+  const CURVE_MONTHS = 24;
+  const CURVE_FIRST_COHORT = "2021-01";   // plan mix settles on 3-month supplies from 2021
+  const MIN_CURVE_BASE = 200;             // hide curve points resting on fewer customers
+  const MIN_RATE_BASE = 100;              // hide churn-rate points resting on fewer customers
+
+  const state = { country: "All", taxonomy: "All" };
+
+  // ---------- helpers ----------
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmtInt = n => Math.round(n).toLocaleString("en-GB");
+  const fmtCompact = n => Math.abs(n) >= 1000 ? (n / 1000).toFixed(Math.abs(n) >= 10000 ? 0 : 1).replace(/\.0$/, "") + "K" : String(Math.round(n));
+  const fmtPct = (x, d = 1) => (x * 100).toFixed(d) + "%";
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthLabel = ym => MONTH_NAMES[+ym.slice(5) - 1] + " " + ym.slice(0, 4);
+  const monthsBetween = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5) - +a.slice(5));
+  const addMonths = (ym, n) => {
+    const t = +ym.slice(0, 4) * 12 + (+ym.slice(5) - 1) + n;
+    return String(Math.floor(t / 12)) + "-" + String(t % 12 + 1).padStart(2, "0");
+  };
+  const scale = (d0, d1, r0, r1) => v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0);
+
+  function niceStep(range, count) {
+    const raw = range / Math.max(count, 1);
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / pow;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * pow;
+  }
+  function ticks(min, max, count) {
+    const step = niceStep(max - min, count);
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    const out = [];
+    for (let v = lo; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+    return { ticks: out, max: hi, min: lo };
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs = {}, parent) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function text(parent, x, y, str, attrs = {}) {
+    const node = el("text", { x, y, ...attrs }, parent);
+    node.textContent = str;
+    return node;
+  }
+  // A bar with a 4px rounded data-end and a square baseline end.
+  function barPath(x, y0, y1, w) {
+    const up = y1 < y0;
+    const h = Math.abs(y1 - y0);
+    const r = Math.min(4, w / 2, h);
+    if (h <= 0) return "";
+    if (up) return `M${x},${y0} V${y1 + r} Q${x},${y1} ${x + r},${y1} H${x + w - r} Q${x + w},${y1} ${x + w},${y1 + r} V${y0} Z`;
+    return `M${x},${y0} V${y1 - r} Q${x},${y1} ${x + r},${y1} H${x + w - r} Q${x + w},${y1} ${x + w},${y1 - r} V${y0} Z`;
+  }
+
+  // ---------- tooltip ----------
+  const tip = document.getElementById("tooltip");
+  function showTip(evtOrPoint, title, rows) {
+    tip.replaceChildren();
+    const t = document.createElement("div");
+    t.className = "title";
+    t.textContent = title;
+    tip.appendChild(t);
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "row";
+      if (r.color) {
+        const k = document.createElement("i");
+        k.className = "key";
+        k.style.background = r.color;
+        row.appendChild(k);
+      }
+      const b = document.createElement("b");
+      b.textContent = r.value;
+      const s = document.createElement("span");
+      s.textContent = r.label;
+      row.append(b, s);
+      tip.appendChild(row);
+    }
+    tip.style.display = "block";
+    const { clientX: x, clientY: y } = evtOrPoint;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - w - 8, x + 14) + "px";
+    tip.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y - h - 12)) + "px";
+  }
+  const hideTip = () => { tip.style.display = "none"; };
+
+  // ---------- table view (every chart has one) ----------
+  function addTableToggle(card, buildTable) {
+    const head = card.querySelector(".card-head");
+    let btn = head.querySelector(".table-toggle");
+    let wrap = card.querySelector(".data-table");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.className = "table-toggle";
+      btn.type = "button";
+      btn.textContent = "Show table";
+      btn.setAttribute("aria-expanded", "false");
+      head.appendChild(btn);
+      wrap = document.createElement("div");
+      wrap.className = "data-table";
+      wrap.hidden = true;
+      card.appendChild(wrap);
+      btn.addEventListener("click", () => {
+        wrap.hidden = !wrap.hidden;
+        btn.textContent = wrap.hidden ? "Show table" : "Hide table";
+        btn.setAttribute("aria-expanded", String(!wrap.hidden));
+      });
+    }
+    const { headers, rows } = buildTable();
+    const table = document.createElement("table");
+    const thead = table.createTHead().insertRow();
+    for (const h of headers) { const th = document.createElement("th"); th.textContent = h; thead.appendChild(th); }
+    const tbody = table.createTBody();
+    for (const r of rows) {
+      const tr = tbody.insertRow();
+      for (const v of r) tr.insertCell().textContent = v;
+    }
+    wrap.replaceChildren(table);
+  }
+
+  function chartHost(card) {
+    let host = card.querySelector(".chart");
+    if (!host) {
+      host = document.createElement("div");
+      host.className = "chart";
+      const note = card.querySelector(".note");
+      card.insertBefore(host, note || card.querySelector(".data-table"));
+    }
+    host.replaceChildren();
+    return host;
+  }
+  function setNote(card, str) {
+    let note = card.querySelector(".note");
+    if (!note) {
+      note = document.createElement("p");
+      note.className = "note";
+      card.insertBefore(note, card.querySelector(".data-table"));
+    }
+    note.textContent = str;
+  }
+  function setLegend(card, items) {
+    let legend = card.querySelector(".legend");
+    if (!legend) {
+      legend = document.createElement("div");
+      legend.className = "legend";
+      card.insertBefore(legend, card.querySelector(".chart"));
+    }
+    legend.replaceChildren();
+    for (const it of items) {
+      const s = document.createElement("span");
+      const i = document.createElement("i");
+      if (it.line) i.className = "line";
+      i.style.background = it.color;
+      s.append(i, document.createTextNode(it.label));
+      legend.appendChild(s);
+    }
+  }
+
+  // ---------- aggregation ----------
+  function filteredRows(ignoreTaxonomy = false) {
+    return ROWS.filter(r =>
+      (state.country === "All" || r[C.country] === state.country) &&
+      (ignoreTaxonomy || state.taxonomy === "All" || r[C.acquisition_taxonomy] === state.taxonomy));
+  }
+
+  function monthlyTotals(rows) {
+    const out = MONTHS.map(() => ({ active: 0, new: 0, continuing: 0, returning: 0, churned: 0 }));
+    for (const r of rows) {
+      const m = out[MONTH_INDEX.get(r[C.activity_month])];
+      m.active += r[C.active_customers];
+      m.new += r[C.new_customers];
+      m.continuing += r[C.continuing_customers];
+      m.returning += r[C.returning_customers];
+      m.churned += r[C.churned_customers];
+    }
+    return out;
+  }
+
+  // Cohort sizes and actives by months-since-cohort.
+  function cohortMatrix(rows, firstCohort) {
+    const size = new Map(), active = new Map();
+    for (const r of rows) {
+      const c = r[C.cohort_month];
+      if (c < firstCohort) continue;
+      const m = r[C.months_since_cohort];
+      if (m === 0) size.set(c, (size.get(c) || 0) + r[C.active_customers]);
+      if (!active.has(c)) active.set(c, []);
+      const a = active.get(c);
+      a[m] = (a[m] || 0) + r[C.active_customers];
+    }
+    return { size, active };
+  }
+
+  // Retention at month m uses ONLY cohorts old enough to have reached month m, in both
+  // numerator and denominator. Mixing in younger cohorts would drag the curve down.
+  function retentionCurve(rows) {
+    const { size, active } = cohortMatrix(rows, CURVE_FIRST_COHORT);
+    const out = [];
+    for (let m = 0; m <= CURVE_MONTHS; m++) {
+      let num = 0, den = 0;
+      for (const [c, s] of size) {
+        if (monthsBetween(c, LATEST) < m) continue;
+        den += s;
+        num += (active.get(c)[m] || 0);
+      }
+      out.push(den >= MIN_CURVE_BASE ? { value: num / den, num, den } : null);
+    }
+    return out;
+  }
+
+  // ---------- KPI row ----------
+  function renderKpis(totals) {
+    const iLast = MONTH_INDEX.get(LATEST), iChurn = MONTH_INDEX.get(LATEST_CHURN);
+    const last = totals[iLast], prev = totals[iLast - 1];
+    const churnRate = i => totals[i].active ? totals[i].churned / totals[i].active : 0;
+
+    // 12-month retention for the 12 most recent cohorts that have reached month 12.
+    const firstC = addMonths(LATEST, -23), lastC = addMonths(LATEST, -12);
+    let size12 = 0, act12 = 0;
+    for (const r of filteredRows()) {
+      const c = r[C.cohort_month];
+      if (c < firstC || c > lastC) continue;
+      if (r[C.months_since_cohort] === 0) size12 += r[C.active_customers];
+      if (r[C.months_since_cohort] === 12) act12 += r[C.active_customers];
+    }
+
+    const tiles = [
+      { label: `Active customers, ${monthLabel(LATEST)}`, value: fmtInt(last.active),
+        delta: pctDelta(last.active, prev.active, true), vs: `vs ${monthLabel(MONTHS[iLast - 1])}` },
+      { label: `New customers, ${monthLabel(LATEST)}`, value: fmtInt(last.new),
+        delta: pctDelta(last.new, prev.new, true), vs: `vs ${monthLabel(MONTHS[iLast - 1])}` },
+      { label: `Churn rate, ${monthLabel(LATEST_CHURN)}`, value: fmtPct(churnRate(iChurn)),
+        delta: ppDelta(churnRate(iChurn), churnRate(iChurn - 1), false), vs: `vs ${monthLabel(MONTHS[iChurn - 1])}` },
+      { label: "12-month retention", value: size12 ? fmtPct(act12 / size12) : "–",
+        delta: null, vs: `Cohorts ${monthLabel(firstC)} – ${monthLabel(lastC)}` },
+    ];
+    const host = document.getElementById("kpis");
+    host.replaceChildren();
+    for (const t of tiles) {
+      const tile = document.createElement("div");
+      tile.className = "tile";
+      const l = document.createElement("div"); l.className = "label"; l.textContent = t.label;
+      const v = document.createElement("div"); v.className = "value"; v.textContent = t.value;
+      const d = document.createElement("div"); d.className = "delta";
+      if (t.delta) {
+        const s = document.createElement("span");
+        s.className = t.delta.good ? "good" : "bad";
+        s.textContent = t.delta.text;
+        d.append(s, document.createTextNode(" " + t.vs));
+      } else d.textContent = t.vs;
+      tile.append(l, v, d);
+      host.appendChild(tile);
+    }
+  }
+  function pctDelta(now, before, upIsGood) {
+    if (!before) return null;
+    const x = (now - before) / before;
+    return { text: (x >= 0 ? "▲ " : "▼ ") + Math.abs(x * 100).toFixed(1) + "%", good: (x >= 0) === upIsGood };
+  }
+  function ppDelta(now, before, upIsGood) {
+    const x = (now - before) * 100;
+    return { text: (x >= 0 ? "▲ " : "▼ ") + Math.abs(x).toFixed(1) + " pts", good: (x >= 0) === upIsGood };
+  }
+
+  // ---------- line chart (crosshair + tooltip) ----------
+  function lineChart(card, { labels, series, yMin = 0, yMax, yFormat, xTick, height = 240, area = false,
+                             endLabels = false, ariaLabel, tipTitle }) {
+    const host = chartHost(card);
+    if (!series.some(s => s.values.some(v => v != null))) {
+      host.textContent = "Too few customers in this selection to plot reliably.";
+      host.style.color = css("--text-secondary");
+      host.style.padding = "24px 0";
+      return;
+    }
+    host.style.padding = "";
+    const W = host.clientWidth || 600;
+    const endPad = endLabels ? 108 : 12;
+    const M = { l: 48, r: endPad, t: 10, b: 26 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${height}`, height, role: "img", "aria-label": ariaLabel, tabindex: 0 }, host);
+    const all = series.flatMap(s => s.values.filter(v => v != null));
+    const yt = ticks(yMin, yMax ?? (Math.max(...all) || 1), 4);
+    const x = scale(0, labels.length - 1, M.l, W - M.r);
+    const y = scale(yt.min, yt.max, height - M.b, M.t);
+
+    for (const t of yt.ticks) {
+      el("line", { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), stroke: t === yt.min ? css("--axis") : css("--grid"), "stroke-width": 1 }, svg);
+      text(svg, M.l - 8, y(t) + 4, yFormat(t), { class: "axis-text", "text-anchor": "end" });
+    }
+    labels.forEach((lab, i) => {
+      const s = xTick(lab, i);
+      if (s) text(svg, x(i), height - 8, s, { class: "axis-text", "text-anchor": "middle" });
+    });
+
+    for (const s of series) {
+      const pts = s.values.map((v, i) => v == null ? null : [x(i), y(v)]);
+      let d = "", started = false;
+      pts.forEach(p => { if (!p) { started = false; return; } d += (started ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1); started = true; });
+      if (area) {
+        const valid = pts.filter(Boolean);
+        if (valid.length) {
+          const a = `M${valid[0][0]},${y(yt.min)} ` + valid.map(p => `L${p[0]},${p[1]}`).join(" ") + ` L${valid[valid.length - 1][0]},${y(yt.min)} Z`;
+          el("path", { d: a, fill: s.color, "fill-opacity": 0.1 }, svg);
+        }
+      }
+      el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    }
+
+    if (endLabels) placeEndLabels(svg, series, x, y, W - M.r);
+
+    // Crosshair: snaps to the nearest month; one tooltip lists every series.
+    const cross = el("line", { y1: M.t, y2: height - M.b, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden" }, svg);
+    const dots = series.map(s => el("circle", { r: 4, fill: s.color, stroke: css("--surface-1"), "stroke-width": 2, visibility: "hidden" }, svg));
+    let current = null;
+    function show(i, evt) {
+      current = i;
+      cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+      series.forEach((s, k) => {
+        const v = s.values[i];
+        dots[k].setAttribute("visibility", v == null ? "hidden" : "visible");
+        if (v != null) { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(v)); }
+      });
+      const rows = series.filter(s => s.values[i] != null)
+        .map(s => ({ color: s.color, value: s.format ? s.format(s.values[i], i) : yFormat(s.values[i]), label: s.name }));
+      if (!rows.length) { hideTip(); return; }
+      const box = svg.getBoundingClientRect();
+      const pt = evt || { clientX: box.left + x(i) * box.width / W, clientY: box.top + M.t + 20 };
+      showTip(pt, tipTitle(labels[i], i), rows);
+    }
+    function hide() { cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); hideTip(); }
+    const hit = el("rect", { x: M.l, y: M.t, width: W - M.l - M.r, height: height - M.t - M.b, fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", e => {
+      const box = svg.getBoundingClientRect();
+      const px = (e.clientX - box.left) * W / box.width;
+      const i = Math.max(0, Math.min(labels.length - 1, Math.round((px - M.l) / ((W - M.l - M.r) / (labels.length - 1)))));
+      show(i, e);
+    });
+    hit.addEventListener("pointerleave", hide);
+    svg.addEventListener("keydown", e => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const i = current == null ? labels.length - 1 : Math.max(0, Math.min(labels.length - 1, current + (e.key === "ArrowRight" ? 1 : -1)));
+      show(i);
+    });
+    svg.addEventListener("blur", hide);
+  }
+
+  // End labels; when they'd collide, spread them and draw leader lines back to the line ends.
+  function placeEndLabels(svg, series, x, y, xEnd) {
+    const items = series.map(s => {
+      let i = s.values.length - 1;
+      while (i >= 0 && s.values[i] == null) i--;
+      return i < 0 ? null : { s, i, yLine: y(s.values[i]) };
+    }).filter(Boolean).sort((a, b) => a.yLine - b.yLine);
+    const gap = 14;
+    const early = items.filter(it => x(it.i) < xEnd - 40);
+    for (const it of early) {
+      el("circle", { cx: x(it.i), cy: it.yLine, r: 4, fill: it.s.color, stroke: css("--surface-1"), "stroke-width": 2 }, svg);
+      text(svg, x(it.i) + 8, it.yLine - 8, it.s.short || it.s.name, { class: "label-text" });
+    }
+    const atEnd = items.filter(it => !early.includes(it));
+    atEnd.forEach((it, k) => { it.yLabel = k ? Math.max(it.yLine, atEnd[k - 1].yLabel + gap) : it.yLine; });
+    for (const it of atEnd) {
+      const lx = xEnd + 16;
+      if (Math.abs(it.yLabel - it.yLine) > 1 || x(it.i) < xEnd - 1) {
+        el("line", { x1: x(it.i) + 4, y1: it.yLine, x2: lx - 3, y2: it.yLabel, stroke: css("--axis"), "stroke-width": 1 }, svg);
+      }
+      el("circle", { cx: x(it.i), cy: it.yLine, r: 4, fill: it.s.color, stroke: css("--surface-1"), "stroke-width": 2 }, svg);
+      text(svg, lx, it.yLabel + 4, it.s.short || it.s.name, { class: "label-text" });
+    }
+  }
+
+  // ---------- flows chart (diverging columns) ----------
+  function flowsChart(card, totals) {
+    const host = chartHost(card);
+    const W = host.clientWidth || 900, H = 280;
+    const M = { l: 48, r: 84, t: 10, b: 26 };
+    const colors = { new: css("--series-1"), returning: css("--series-2"), churned: css("--series-3") };
+    setLegend(card, [
+      { label: "New", color: colors.new }, { label: "Returning", color: colors.returning },
+      { label: "Contracts ended", color: colors.churned },
+    ]);
+    const iChurn = MONTH_INDEX.get(LATEST_CHURN);
+    const churnShown = (m, i) => i <= iChurn;
+    const up = totals.map(t => t.new + t.returning);
+    const down = totals.map((t, i) => churnShown(t, i) ? t.churned : 0);
+    const yt = ticks(-Math.max(...down), Math.max(...up), 5);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Monthly new, returning and ended customers" }, host);
+    const band = (W - M.l - M.r) / MONTHS.length;
+    const bw = Math.max(2, Math.min(24, band - 2));
+    const x = i => M.l + i * band + (band - bw) / 2;
+    const y = scale(yt.min, yt.max, H - M.b, M.t);
+
+    for (const t of yt.ticks) {
+      el("line", { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), stroke: t === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }, svg);
+      text(svg, M.l - 8, y(t) + 4, fmtCompact(Math.abs(t)), { class: "axis-text", "text-anchor": "end" });
+    }
+    MONTHS.forEach((m, i) => {
+      if (m.endsWith("-01")) text(svg, x(i) + bw / 2, H - 8, m.slice(0, 4), { class: "axis-text", "text-anchor": "middle" });
+    });
+
+    const hover = el("rect", { y: M.t, height: H - M.t - M.b, fill: css("--grid"), "fill-opacity": 0.6, visibility: "hidden" }, svg);
+    const GAP = 2;
+    totals.forEach((t, i) => {
+      const x0 = x(i), y0 = y(0);
+      // new on the baseline, returning stacked on top with a 2px surface gap
+      const yNew = y(t.new);
+      if (t.returning > 0) el("path", { d: barPath(x0, yNew - (t.new ? GAP : 0), y(t.new + t.returning), bw), fill: colors.returning }, svg);
+      if (t.new > 0) el("path", { d: t.returning > 0 ? `M${x0},${y0} V${yNew} H${x0 + bw} V${y0} Z` : barPath(x0, y0, yNew, bw), fill: colors.new }, svg);
+      if (churnShown(t, i) && t.churned > 0) el("path", { d: barPath(x0, y0, y(-t.churned), bw), fill: colors.churned }, svg);
+    });
+
+    // Direct labels beside the last complete columns.
+    const iL = MONTHS.length - 1, tl = totals[iL], tc = totals[iChurn];
+    const lx = x(iL) + bw + 8;
+    const labels = [
+      { y: y(tl.new / 2), s: "New" },
+      { y: y(tl.new + tl.returning / 2), s: "Returning" },
+      { y: y(-tc.churned / 2), s: "Ended" },
+    ].sort((a, b) => a.y - b.y);
+    labels.forEach((l, k) => { if (k && l.y - labels[k - 1].y < 14) l.y = labels[k - 1].y + 14; });
+    labels.forEach(l => text(svg, lx, l.y + 4, l.s, { class: "label-text" }));
+
+    // Per-column hit targets (the whole band, bigger than the mark).
+    MONTHS.forEach((m, i) => {
+      const hit = el("rect", { x: M.l + i * band, y: M.t, width: band, height: H - M.t - M.b, fill: "transparent" }, svg);
+      const t = totals[i];
+      hit.addEventListener("pointermove", e => {
+        hover.setAttribute("x", M.l + i * band); hover.setAttribute("width", band); hover.setAttribute("visibility", "visible");
+        showTip(e, monthLabel(m), [
+          { color: colors.new, value: fmtInt(t.new), label: "new" },
+          { color: colors.returning, value: fmtInt(t.returning), label: "returning" },
+          { color: colors.churned, value: i <= iChurn ? fmtInt(t.churned) : "not final", label: "contracts ended" },
+        ]);
+      });
+      hit.addEventListener("pointerleave", () => { hover.setAttribute("visibility", "hidden"); hideTip(); });
+    });
+    svg.insertBefore(hover, svg.firstChild.nextSibling);
+
+    setNote(card, `Contracts ended in ${monthLabel(LATEST)} aren't shown: an end is only confirmed 28 days after cover stops.`);
+    addTableToggle(card, () => ({
+      headers: ["Month", "New", "Returning", "Contracts ended", "Active"],
+      rows: MONTHS.map((m, i) => [monthLabel(m), fmtInt(totals[i].new), fmtInt(totals[i].returning),
+        i <= iChurn ? fmtInt(totals[i].churned) : "not final", fmtInt(totals[i].active)]).reverse(),
+    }));
+  }
+
+
+  // ---------- render all ----------
+  function render() {
+    const rows = filteredRows();
+    const totals = monthlyTotals(rows);
+    const yearTick = lab => lab.endsWith("-01") ? lab.slice(0, 4) : "";
+
+    renderKpis(totals);
+
+    // Active customers
+    const cardActive = document.getElementById("card-active");
+    lineChart(cardActive, {
+      labels: MONTHS, height: 220, area: true,
+      series: [{ name: "active customers", color: css("--series-1"), values: totals.map(t => t.active), format: fmtInt }],
+      yFormat: fmtCompact, xTick: yearTick, tipTitle: monthLabel, ariaLabel: "Active customers per month",
+    });
+    addTableToggle(cardActive, () => ({
+      headers: ["Month", "Active customers", "New", "Continuing", "Returning"],
+      rows: MONTHS.map((m, i) => [monthLabel(m), fmtInt(totals[i].active), fmtInt(totals[i].new), fmtInt(totals[i].continuing), fmtInt(totals[i].returning)]).reverse(),
+    }));
+
+    // Flows
+    flowsChart(document.getElementById("card-flows"), totals);
+
+    // Churn rate (latest month excluded: not final)
+    const iChurn = MONTH_INDEX.get(LATEST_CHURN);
+    // The first month of data is skipped: no contract can have ended yet, so it reads as 0%.
+    const rate = totals.map((t, i) => i === 0 || i > iChurn || t.active < MIN_RATE_BASE ? null : t.churned / t.active);
+    const cardChurn = document.getElementById("card-churn");
+    lineChart(cardChurn, {
+      labels: MONTHS, height: 220,
+      series: [{ name: "churn rate", color: css("--series-3"), values: rate, format: v => fmtPct(v) }],
+      yFormat: v => fmtPct(v, 0), xTick: yearTick, tipTitle: monthLabel, ariaLabel: "Monthly churn rate",
+    });
+    setNote(cardChurn, `Up to ${monthLabel(LATEST_CHURN)}; ${monthLabel(LATEST)} isn't final yet. Months with fewer than ${MIN_RATE_BASE} active customers are hidden.`);
+    addTableToggle(cardChurn, () => ({
+      headers: ["Month", "Churn rate", "Contracts ended", "Active"],
+      rows: MONTHS.map((m, i) => [monthLabel(m), rate[i] == null ? "–" : fmtPct(rate[i]), i <= iChurn ? fmtInt(totals[i].churned) : "not final", fmtInt(totals[i].active)]).reverse(),
+    }));
+
+    // Retention curves by treatment (country filter applies; the treatment filter narrows to one line)
+    const base = filteredRows(true);
+    const treatments = state.taxonomy === "All" ? CURVE_TREATMENTS : CURVE_TREATMENTS.filter(t => t === state.taxonomy);
+    const curves = treatments.map(t => ({
+      t, points: retentionCurve(base.filter(r => r[C.acquisition_taxonomy] === t)),
+    }));
+    const cardCurves = document.getElementById("card-curves");
+    const curveSeries = curves.map(({ t, points }) => ({
+      name: t.replace(" Group", ""), short: t.replace(" Group", ""),
+      color: css(`--series-${TREATMENT_SLOT[t]}`),
+      values: points.map(p => p && p.value),
+      format: v => fmtPct(v),
+    }));
+    setLegend(cardCurves, curveSeries.map(s => ({ label: s.name, color: s.color, line: true })));
+    if (curveSeries.length) {
+      lineChart(cardCurves, {
+        labels: Array.from({ length: CURVE_MONTHS + 1 }, (_, m) => m), height: 220, yMax: 1, endLabels: true,
+        series: curveSeries, yFormat: v => fmtPct(v, 0),
+        xTick: m => m % 6 === 0 ? String(m) : "", tipTitle: m => `Month ${m} since first subscribing`,
+        ariaLabel: "Retention curves by acquisition treatment",
+      });
+      setNote(cardCurves, `Cohorts from ${monthLabel(CURVE_FIRST_COHORT)}. Each month uses only cohorts old enough to have reached it. TRT and Unknown are too small to plot.`);
+    } else {
+      chartHost(cardCurves).textContent = "Too few customers in this treatment to plot a reliable curve.";
+      setNote(cardCurves, "");
+    }
+    addTableToggle(cardCurves, () => ({
+      headers: ["Months since first subscribing", ...curveSeries.map(s => s.name)],
+      rows: Array.from({ length: CURVE_MONTHS + 1 }, (_, m) => [String(m), ...curves.map(c => c.points[m] ? fmtPct(c.points[m].value) : "–")]),
+    }));
+  }
+
+  // ---------- filters ----------
+  function fillSelect(id, options, key) {
+    const sel = document.getElementById(id);
+    for (const [value, label] of options) {
+      const o = document.createElement("option");
+      o.value = value; o.textContent = label;
+      sel.appendChild(o);
+    }
+    sel.addEventListener("change", () => { state[key] = sel.value; render(); });
+  }
+  const countries = [...new Set(ROWS.map(r => r[C.country]))].sort();
+  fillSelect("filter-country", [["All", "All countries"], ...countries.map(c => [c, c])], "country");
+  fillSelect("filter-taxonomy", [["All", "All treatments"], ...ALL_TREATMENTS.map(t => [t, t.replace(" Group", "")])], "taxonomy");
+
+  document.getElementById("data-note").textContent =
+    `Monthly activity from ${monthLabel(MONTHS[0])} to ${monthLabel(LATEST)}. Data exported ${META.generated_at}.`;
+
+  render();
+  let resizeTimer;
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+})();
+</script>
+</body>
+</html>

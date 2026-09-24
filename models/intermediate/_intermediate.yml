@@ -1,0 +1,43 @@
+models:
+  - name: int_customer_active_periods
+    description: >
+      Continuous customer-level active periods: all of a customer's subscription intervals
+      merged, with gaps of up to grace_period_days uncovered days bridged. Covers activity
+      up to analysis_end_date only.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [customer_id, period_number]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "period_end_date >= period_start_date"
+      # Consecutive periods must be separated by MORE than the grace period,
+      # otherwise the merge should have joined them. This is the no-overlap check.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              (period_number = 1 and days_since_previous_period is null)
+              or days_since_previous_period > {{ var('grace_period_days') }}
+    columns:
+      - name: customer_id
+        description: The customer. Joins to dim_customer.
+        data_tests: [not_null]
+      - name: period_number
+        description: 1, 2, 3... in date order within each customer.
+        data_tests: [not_null]
+      - name: period_start_date
+        description: First active day of the period (inclusive).
+        data_tests: [not_null]
+      - name: period_end_date
+        description: Last active day of the period (inclusive).
+        data_tests: [not_null]
+      - name: period_length_days
+        description: Days from start to end inclusive. Includes bridged gap days.
+      - name: days_since_previous_period
+        description: Uncovered days between the previous period's end and this one's start. Null for the first period.
+      - name: subscriptions_in_period
+        description: Distinct subscriptions contributing to the period.
+      - name: is_open_at_extract_end
+        description: >
+          The period ends within grace_period_days of analysis_end_date, so it may still be
+          running (mid-renewal). Not known to have ended; excluded from completed-lifetime measures.

@@ -1,0 +1,24 @@
+# Python / uv
+.venv/
+__pycache__/
+
+# dbt build artefacts
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# Local DuckDB warehouse (rebuilt by `dbt build`)
+*.duckdb
+*.duckdb.wal
+
+# Raw CSVs: the gzipped copies in data/ are the committed source of truth
+data/*.csv
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Assessment brief (kept local, not published)
+assessment_brief.md

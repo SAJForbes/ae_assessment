@@ -1,0 +1,190 @@
+models:
+  - name: dim_customer
+    description: >
+      One row per customer (532,848), including those with no activity in the analysis window.
+      Use it for customer attributes and to segment the facts: join on customer_id. Attributes
+      are fixed at acquisition, so a customer's cohort and segments never change over time.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_customers')
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "has_activity = (cohort_month is not null)"
+    columns:
+      - name: customer_id
+        description: Primary key. Joins to fct_customer_month and int_customer_active_periods.
+        data_tests: [unique, not_null]
+      - name: country
+        description: Customer's country. 'United Kingdom' or 'Brazil'.
+        data_tests: [not_null]
+      - name: acquisition_taxonomy
+        description: >
+          Treatment category of the order that acquired the customer, e.g. 'Hair Loss Group'.
+          'Unknown' where no acquisition record exists. Mental Health Group (1 customer) is
+          folded into 'Other Group'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Hair Loss Group", "ED Group", "Weight Loss Group", "Other Group", "Sleep Group", "TRT Group", "Unknown"]
+      - name: cohort_month
+        description: >
+          First day of the month of the customer's first active day. The acquisition cohort.
+          Null if they have no activity in the analysis window.
+      - name: first_active_date
+        description: The customer's first active day. Null if no activity.
+      - name: last_active_date
+        description: The customer's last active day up to analysis_end_date. Null if no activity.
+      - name: n_active_periods
+        description: Number of continuous active periods (contracts). More than 1 means the customer's contract ended and they came back.
+      - name: total_active_days
+        description: Sum of active period lengths in days, including bridged gaps of up to grace_period_days.
+      - name: is_active_at_extract_end
+        description: >
+          The customer's latest period may still be running at analysis_end_date (it ends within
+          grace_period_days of it). Treat these customers as current, not churned.
+      - name: has_activity
+        description: >
+          False for customers with no activity in the analysis window: never subscribed
+          (20,482) or active only in the excluded August 2024 extract (6,103).
+
+  - name: dim_date
+    description: >
+      Calendar: one row per day from the first month with activity to analysis_end_date.
+      Month-grain facts join on month_start_date (equal to their activity_month).
+    columns:
+      - name: date_day
+        description: The date. Primary key.
+        data_tests: [unique, not_null]
+      - name: month_start_date
+        description: First day of the month containing date_day. Join month-grain facts here.
+      - name: month_label
+        description: "Month as text, 'YYYY-MM'."
+      - name: quarter_label
+        description: "Quarter as text, 'YYYY-Qn'."
+      - name: year
+        description: Calendar year.
+      - name: is_month_start
+        description: True on the first day of each month. Filter on it to get one row per month.
+      - name: is_churn_complete
+        description: >
+          Churn for this month is final: grace_period_days have passed since the month's last day.
+          False for the latest month (July 2024), where contract ends can't be confirmed yet.
+          Filter on it whenever reporting churn.
+
+  - name: fct_customer_month
+    description: >
+      The main analysis table. One row per customer per month in which they had any active day
+      (3,962,648 rows). A month is active if any day falls inside one of the customer's active
+      periods, however many subscriptions they hold. A contract ends (churn) when cover stops and
+      doesn't restart within grace_period_days; it is recorded in the month cover stopped.
+      Customer attributes (country, acquisition_taxonomy, cohort_month) live in dim_customer:
+      join on customer_id. Each row is one customer, so count(*) counts customers.
+      Do not add monthly counts across months to get a period total (the same customer appears
+      in many months); use count(distinct customer_id) or int_customer_active_periods.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [customer_id, activity_month]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "is_active"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(movement = 'returning') = (days_inactive_before is not null)"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "days_inactive_before is null or days_inactive_before > {{ var('grace_period_days') }}"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(movement = 'new') = (months_since_cohort = 0)"
+    columns:
+      - name: customer_id
+        description: The customer. Joins to dim_customer.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_id
+      - name: activity_month
+        description: First day of the month (a date, e.g. 2024-07-01). Joins to dim_date.month_start_date.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: movement
+        description: >
+          How the customer started the month. 'new': their first contract starts this month.
+          'returning': a later contract starts this month, after an earlier one ended.
+          'continuing': any other active month. A contract ending and a new one starting within
+          the same calendar month counts as 'continuing'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["new", "continuing", "returning"]
+      - name: is_active
+        description: Always true; every row is an active month. Kept for readability.
+      - name: is_churned
+        description: >
+          The customer's contract ends this month: cover stops and doesn't restart within
+          grace_period_days. The customer is still active this month. Only final where
+          dim_date.is_churn_complete is true.
+        data_tests: [not_null]
+      - name: months_since_cohort
+        description: Whole months since the customer's first active month; 0 in that month.
+      - name: days_inactive_before
+        description: On 'returning' rows, the days without cover between the previous contract ending and this one starting. Null otherwise.
+
+  - name: rpt_monthly_retention_summary
+    description: >
+      Pre-aggregated customer counts by cohort_month x activity_month x country x
+      acquisition_taxonomy (10,025 rows). Feeds the dashboard. Every measure is an additive count,
+      so rows can be summed across cohorts, countries and treatments. Derive rates when reading:
+      cohort size = new_customers at months_since_cohort 0; cohort retention = active_customers /
+      cohort size; churn rate = churned_customers / active_customers in the same month, only where
+      is_churn_complete. For ad-hoc analysis prefer fct_customer_month joined to dim_customer.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cohort_month, activity_month, country, acquisition_taxonomy]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "active_customers = new_customers + continuing_customers + returning_customers"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "churned_customers <= active_customers"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "cohort_month <= activity_month"
+    columns:
+      - name: cohort_month
+        description: The customers' acquisition cohort (first day of month).
+        data_tests: [not_null]
+      - name: activity_month
+        description: The month being counted (first day of month).
+        data_tests: [not_null]
+      - name: months_since_cohort
+        description: Whole months from cohort_month to activity_month.
+      - name: country
+        description: Customer country, from dim_customer.
+        data_tests: [not_null]
+      - name: acquisition_taxonomy
+        description: Acquisition treatment category, from dim_customer.
+        data_tests: [not_null]
+      - name: is_churn_complete
+        description: From dim_date. False for the latest month, where churn isn't final.
+      - name: active_customers
+        description: Customers active in the month. Equals new + continuing + returning.
+      - name: new_customers
+        description: Customers whose first contract started this month.
+      - name: continuing_customers
+        description: Active customers carried over from the previous month.
+      - name: returning_customers
+        description: Customers who started a new contract this month after an earlier one ended.
+      - name: churned_customers
+        description: Customers whose contract ended this month (they are also counted as active).

@@ -1,0 +1,10 @@
+[project]
+name = "ae-assessment"
+version = "0.1.0"
+description = "Customer retention models: dbt on DuckDB, plus a static dashboard."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core",
+    "dbt-duckdb",
+    "duckdb",
+]
