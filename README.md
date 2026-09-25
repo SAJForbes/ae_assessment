@@ -41,9 +41,9 @@ A standard star schema (although with only one fact and two dims) was chosen as 
 
 ### Churn definition
 
-I noticed that your subscriptions frequently include short breaks. I wanted to model churn fairly, but the number of gaps would have made for an overwhelming picture, with customers jumping in and out. In the absence of stakeholder input, I decided that churn should be defined with a grace period. In a typical subscription model, churn counts when the date of subscription fails. In my model, I wait a pre-set (and modifiable) period of time before the customer is counted as churned. I decided for the purpose of analysis, 4 weeks would be sufficient; in the real world I would work this out with stakeholders.
+I noticed that your subscriptions frequently include short breaks. I wanted to model churn fairly, but the number of gaps would have made for an overwhelming picture, with customers jumping in and out. In the absence of stakeholder input, I decided that churn should be defined with a grace period. In a typical subscription model, a customer churns on the date their subscription ends. In my model, I wait a pre-set (and modifiable) period of time without cover before the customer is counted as churned, and then date the churn to the month their cover stopped. I decided for the purpose of analysis, 4 weeks would be sufficient; in the real world I would work this out with stakeholders.
 
-My definition of churned introduces a small bit of complexity to the model. Periods smaller than a month mean a customer may churn in the same month they renew after a period of inactivity. I accepted this as a natural consequence of my definition. It means that 'churned' as a category can overlap with 'new'/'continuing'/'returning'. 
+Because a customer churns in the last month they have cover, they are still active in that month. So churn is modelled as a separate flag (`is_churned`) rather than a fourth category alongside 'new'/'continuing'/'returning': every active month has exactly one of those three, and the churn flag can sit on top of any of them. For example, a customer can be new and churn in the same month if their first contract starts and ends within it. 
 
 It is important for analysts and AI to understand the meaning of this definition, so it is included in the guidance.
 
@@ -79,7 +79,9 @@ Below is how I aimed to meet the submission criteria:
 
 ## Limitations and issues
 
-The main issue I noticed was problematic data in August 2024, where subscription durations do not appear to be bucketed correctly. Although it might be possible to remedy, out of caution I decided to treat the data as suspect and exclude it from usage downstream, though I did not remove it from the staging layer.
+The main issue I noticed was problematic data in August 2024, where subscription durations do not appear to be bucketed correctly. There are 443,863 activity rows against a usual ~73,000 and the same subscriptions appear several times with the same start date.
+
+Although it might be possible to remedy, out of caution I decided to treat the data as suspect and exclude it from usage downstream, though I did not remove it from the staging layer. 6,103 customers whose only activity is in August drop out of the analysis and are flagged in `dim_customer` with `has_activity = false`.
 
 I did not include any usage of snapshots or SCD logic as this is static data. In a real scenario, this data would be updated frequently; that would require an enhanced approach.
 
@@ -181,6 +183,18 @@ For the documentation site with the lineage graph and every column description:
 `uv run dbt docs generate`
 
 `uv run dbt docs serve`
+
+---
+
+## Tests
+
+`uv run dbt build` runs 63 tests. 
+
+| Test | What it proves |
+|---|---|
+| `assert_periods_preserve_customer_date_range` | Merging subscriptions into periods never shortens, extends or loses a customer's timeline. |
+| `assert_monthly_movement_balances` | Every month balances: active = last month's active − last month's churn + new + returning. No customer appears or disappears unaccounted for. |
+| `assert_retention_summary_reconciles` | The dashboard's summary table matches `fct_customer_month` exactly, for every month and every measure. |
 
 ---
 
