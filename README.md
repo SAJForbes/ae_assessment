@@ -27,7 +27,15 @@ An html dashboard was chosen for the purposes of showing results in the absence 
 
 ## Output discussion
 
+Without a detailed set of requirements, I made some assumptions about the kind of output required for this assessment. Here are the principles I worked towards:
+
+- Code maintainability and reusability - follow software engineering principles
+- Enable extension - this may make the solution appear over-engineered for its size, but is optimised to be expanded on
+- Simple, usable data models - overly complex layers generate maintenance burden, focus on facts and dimensions as core
+
 As requested in the brief, the retention model is built to enable analysis of retention from different angles.
+
+### Schema
 
 A standard star schema (although with only one fact and two dims) was chosen as both a simple and efficient way to represent the data, optimised for reporting. To optimise the report's speed and make analysis easier, I included a reporting table on top, however this is not strictly necessary and only provides pre-summarised data.
 
@@ -62,7 +70,9 @@ With more data and time spent on this assessment, there is plenty of opportunity
 Below is how I aimed to meet the submission criteria:
 
 **Ease of use** - this phrase has multiple interpretations; I understood it to mean if the data model enables analysts to easily learn about the key metrics discussed here, proven with the example queries.
+
 **Modelling concepts** - Following my usage of a star schema and layers in dbt, based of my understanding of how it will be used.
+
 **Correctness** - I included tests, conducted preliminary investigation (spotting the August 2024 data issue) and made best efforts to ensure I had correctly interpreted and transformed the data.
 
 ---
