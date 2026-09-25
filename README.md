@@ -71,7 +71,7 @@ Below is how I aimed to meet the submission criteria:
 
 **Ease of use** - this phrase has multiple interpretations; I understood it to mean if the data model enables analysts to easily learn about the key metrics discussed in the brief, proven with the example queries.
 
-**Modelling concepts** - Following my usage of a star schema and layers in dbt, based of my understanding of how it will be used.
+**Modelling concepts** - Following my usage of a star schema and layers in dbt, based on my understanding of how it will be used.
 
 **Correctness** - I included tests, conducted preliminary investigation (spotting the August 2024 data issue) and made best efforts to ensure I had correctly interpreted and transformed the data.
 
@@ -85,7 +85,7 @@ Although it might be possible to remedy, out of caution I decided to treat the d
 
 I did not include any usage of snapshots or SCD logic as this is static data. In a real scenario, this data would be updated frequently; that would require an enhanced approach.
 
-I folded Mental Health Group folded into Other Group - too small to report as a segment.
+I folded Mental Health Group into Other Group - too small to report as a segment.
 
 24,154 customers had no acquisition record. Most never ordered. I recorded them as `Unknown`.
 
